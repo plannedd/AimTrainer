@@ -17,15 +17,23 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private bool canSprint = true;
     [SerializeField] private bool canJump = true;
     [SerializeField] private bool canCrouch = true;
+    [SerializeField] private bool canHeadBob = true;
+    [SerializeField] private bool willSlideonSlope = true;
+    [SerializeField] private bool canZoom = true;
 
     [Header("Controls")]
     [SerializeField] private KeyCode sprintKey = KeyCode.LeftShift;
     [SerializeField] private KeyCode jumpKey = KeyCode.Space;
     [SerializeField] private KeyCode crouchKey = KeyCode.LeftControl;
+    [SerializeField] private KeyCode zoomKey = KeyCode.Mouse1;
+
+    [SerializeField] private KeyCode fireKey = KeyCode.Mouse0;
 
     [Header("Movement Settings")]
     [SerializeField] private float walkSpeed = 5f;
     [SerializeField] private float sprintSpeed = 10f;
+
+    [SerializeField] private float slopeSpeed = 8f;
 
     [Header("Mouse Look Settings")]
     [SerializeField, Range(1,10)] private float lookSpeedX = 2f;
@@ -47,6 +55,51 @@ public class FirstPersonController : MonoBehaviour
     private bool isCrouching = false;
     private bool duringCrouchAnimation = false;
 
+    [Header("Head Bob Settings")]
+    [SerializeField] private float walkBobSpeed = 14f;
+    [SerializeField] private float walkBobAmount = 0.05f;
+    [SerializeField] private float sprintBobSpeed = 18f;
+    [SerializeField] private float sprintBobAmount = 0.025f;
+    [SerializeField] private float crouchBobSpeed = 8f;
+    [SerializeField] private float crouchBobAmount = 0.01f;
+
+    private float defaultPosY;
+    private float timer;
+     
+    // SLIDING SETTINGS
+
+    private Vector3 hitNormal;
+    private bool isSliding {
+        get {
+            if(characterController.isGrounded && Physics.Raycast(transform.position, Vector3.down, out RaycastHit slopeHit, 2f)){
+
+                hitNormal = slopeHit.normal;
+                return Vector3.Angle(hitNormal, Vector3.up) > characterController.slopeLimit;
+
+            }
+                
+            else {
+                return false;
+            }
+        }
+    }
+
+    [Header("Zoom Settings")]
+
+    [SerializeField] private float zoomFOV = 60f;
+    [SerializeField] private float defaultFOV = 90f;
+    [SerializeField] private float timeToZoom = 0.1f;
+
+    private Coroutine zoomRoutine;
+
+    [Header("ADS Settings")]
+    [SerializeField] private Transform pistolTransform;
+    [SerializeField] private Vector3 adsPosition;
+    [SerializeField] private Vector3 hipPosition;
+
+    private Coroutine adsRoutine;
+
+
     private Camera playerCamera;
     private CharacterController characterController;
 
@@ -55,12 +108,20 @@ public class FirstPersonController : MonoBehaviour
 
     private float rotationX = 0;
 
+    private Transform firePoint;
+
     void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
+        pistolTransform = GameObject.Find("Pistol").transform;
+        firePoint = GameObject.Find("firePoint").transform;
+        defaultPosY = playerCamera.transform.localPosition.y;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+
+        adsPosition = pistolTransform.localPosition + new Vector3(-.35f, 0.115f, 0.05f);
+        hipPosition = pistolTransform.localPosition;
     }
 
     void Update()
@@ -76,7 +137,29 @@ public class FirstPersonController : MonoBehaviour
             if(canCrouch)
                 handleCrouch();
 
+            if(canHeadBob)
+                HandleHeadBob();
+
+            if(canZoom)
+                HandleZoom();
+                HandleADS();
+            
+            if(Input.GetKeyDown(fireKey))
+                Fire();
+
             ApplyFinalMovement();
+            
+        }
+    }
+
+    private void Fire()
+    {
+        RaycastHit hit;
+        Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)); 
+        ray = new Ray(firePoint.position, firePoint.forward);
+        if (Physics.Raycast(firePoint.position, firePoint.forward, out hit))
+        {
+            Debug.DrawRay (firePoint.transform.position, transform.forward, Color.red, 5);
             
         }
     }
@@ -100,6 +183,10 @@ public class FirstPersonController : MonoBehaviour
         if(!characterController.isGrounded)
             moveDirection.y -= gravity * Time.deltaTime;
 
+        if(willSlideonSlope && isSliding)
+        {
+            moveDirection += new Vector3(hitNormal.x, -hitNormal.y, hitNormal.z) * slopeSpeed;
+        }
         characterController.Move(moveDirection * Time.deltaTime);
     }
 
@@ -115,6 +202,65 @@ public class FirstPersonController : MonoBehaviour
             StartCoroutine(CrouchStand());
         }
     }
+
+
+    private void HandleHeadBob(){
+        if(!characterController.isGrounded)
+            return;
+
+        if(Mathf.Abs(moveDirection.x) > 0.1f || Mathf.Abs(moveDirection.z) > 0.1f)
+        {
+            timer += Time.deltaTime * (isCrouching ? crouchBobSpeed : isSprinting ? sprintBobSpeed : walkBobSpeed);
+
+            playerCamera.transform.localPosition = new Vector3(playerCamera.transform.localPosition.x, defaultPosY + Mathf.Sin(timer) * (isCrouching ? crouchBobAmount : isSprinting ? sprintBobAmount : walkBobAmount), playerCamera.transform.localPosition.z);
+        }
+        else
+        {
+            timer = 0;
+            playerCamera.transform.localPosition = new Vector3(playerCamera.transform.localPosition.x, Mathf.Lerp(playerCamera.transform.localPosition.y, defaultPosY, Time.deltaTime * 11), playerCamera.transform.localPosition.z);
+        }
+
+    }
+
+    private void HandleZoom(){
+        if(Input.GetKeyDown(zoomKey))
+        {
+            if(zoomRoutine != null)
+                StopCoroutine(zoomRoutine);
+                zoomRoutine = null;
+
+            zoomRoutine = StartCoroutine(ToggleZoom(true));
+        }
+
+        if(Input.GetKeyUp(zoomKey))
+        {
+            if(zoomRoutine != null)
+                StopCoroutine(zoomRoutine);
+                zoomRoutine = null;
+
+            zoomRoutine = StartCoroutine(ToggleZoom(false));
+        }
+    }
+
+    private void HandleADS()
+{
+    if (Input.GetKeyDown(zoomKey))
+    {
+        if (adsRoutine != null)
+            StopCoroutine(adsRoutine);
+        adsRoutine = StartCoroutine(ToggleADS(true));
+    }
+
+    if (Input.GetKeyUp(zoomKey))
+    {
+        if (adsRoutine != null)
+            StopCoroutine(adsRoutine);
+        adsRoutine = StartCoroutine(ToggleADS(false));
+    }
+}
+
+
+    // COROUTINES
 
     private IEnumerator CrouchStand()
     {
@@ -141,5 +287,42 @@ public class FirstPersonController : MonoBehaviour
         isCrouching = !isCrouching;
         duringCrouchAnimation = false;
     }
+
+    private IEnumerator ToggleZoom(bool isEnter)
+    {
+        float targetFOV = isEnter ? zoomFOV : defaultFOV;
+        float startFOV = playerCamera.fieldOfView;
+        float timeElapsed = 0;
+
+        while(timeElapsed < timeToZoom)
+        {
+            playerCamera.fieldOfView = Mathf.Lerp(startFOV, targetFOV, timeElapsed / timeToZoom);
+            timeElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        playerCamera.fieldOfView = targetFOV;
+        zoomRoutine = null;
+    }
+
+
+
+    private IEnumerator ToggleADS(bool isEnter)
+{
+    Vector3 targetPosition = isEnter ? adsPosition : hipPosition;
+    Vector3 startPosition = pistolTransform.localPosition;
+    float timeElapsed = 0;
+
+    while (timeElapsed < timeToZoom)
+    {
+        pistolTransform.localPosition = Vector3.Lerp(startPosition, targetPosition, timeElapsed / timeToZoom);
+        timeElapsed += Time.deltaTime;
+        yield return null;
+    }
+
+    pistolTransform.localPosition = targetPosition;
+    adsRoutine = null;
 }
+}
+
 
