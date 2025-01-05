@@ -13,6 +13,7 @@ public class FirstPersonController : MonoBehaviour
     public bool isSprinting => canSprint && Input.GetKey(sprintKey);
     public bool shouldJump => characterController.isGrounded && Input.GetKeyDown(jumpKey);
     public bool shouldCrouch => characterController.isGrounded && Input.GetKeyDown(crouchKey) && !duringCrouchAnimation;
+    
     [Header("Functional Options")]
     [SerializeField] private bool canSprint = true;
     [SerializeField] private bool canJump = true;
@@ -97,6 +98,10 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private Vector3 adsPosition;
     [SerializeField] private Vector3 hipPosition;
 
+    [Header("Weapon Settings")]
+
+    [SerializeField] private int damage = 10;
+
     private Coroutine adsRoutine;
 
 
@@ -161,6 +166,12 @@ public class FirstPersonController : MonoBehaviour
         {
             Debug.DrawRay (firePoint.transform.position, transform.forward, Color.red, 5);
             
+        }
+
+        Target target = hit.transform.GetComponent<Target>();
+        if (target != null)
+        {
+            target.TakeDamage(damage);
         }
     }
 
