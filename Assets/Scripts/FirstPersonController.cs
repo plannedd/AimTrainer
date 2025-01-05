@@ -4,6 +4,7 @@ using System.Text;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Entities;
 
 
 public class FirstPersonController : MonoBehaviour
@@ -115,6 +116,10 @@ public class FirstPersonController : MonoBehaviour
 
     private Transform firePoint;
 
+    private ParticleSystem muzzleFlash;
+
+    public AudioClip gunSound;
+
     void Awake()
     {
         playerCamera = GetComponentInChildren<Camera>();
@@ -124,7 +129,7 @@ public class FirstPersonController : MonoBehaviour
         defaultPosY = playerCamera.transform.localPosition.y;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-
+        muzzleFlash = GameObject.Find("muzzleFlash").GetComponent<ParticleSystem>();
         adsPosition = pistolTransform.localPosition + new Vector3(-.35f, 0.115f, 0.05f);
         hipPosition = pistolTransform.localPosition;
     }
@@ -161,7 +166,8 @@ public class FirstPersonController : MonoBehaviour
     {
         RaycastHit hit;
         Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)); 
-        ray = new Ray(firePoint.position, firePoint.forward);
+        AudioSource.PlayClipAtPoint(gunSound, firePoint.position);
+        muzzleFlash.Play();
         if (Physics.Raycast(firePoint.position, firePoint.forward, out hit))
         {
             Debug.DrawRay (firePoint.transform.position, transform.forward, Color.red, 5);
@@ -173,6 +179,7 @@ public class FirstPersonController : MonoBehaviour
         {
             target.TakeDamage(damage);
         }
+
     }
 
     private void HandleMovementInput(){
