@@ -165,7 +165,7 @@ public class FirstPersonController : MonoBehaviour
     private void Fire()
     {
         RaycastHit hit;
-        Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0)); 
+        Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f)); 
         AudioSource.PlayClipAtPoint(gunSound, firePoint.position);
         muzzleFlash.Play();
         if (Physics.Raycast(firePoint.position, firePoint.forward, out hit))
